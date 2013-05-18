@@ -27,6 +27,8 @@ use Getopt::Long;
 #     --weight1=1
 # $weight2
 #     --weight2=1
+# #max_simulations=1
+#  how many consecutive simulations
 ##########################################
 my $max_events = 0; 
 my $max_time = 0; 
@@ -36,6 +38,17 @@ my $mu = 1.0;
 my $scheduling_strategy = 'least-time';
 my $weight1 = 1;
 my $weight2 = 1;
+my $max_simulations = 1;
+
+##########################################
+# Storage
+##########################################
+my $outfile_dir = 'simulations/' . time() . '/';
+my $outfile = $outfile_dir . 'simulation.txt';
+if(! -d $outfile_dir) {
+    mkdir($outfile_dir) or die 'Could not create directory ' . $outfile_dir;
+}
+open(my $of, '> ' . $outfile) or die 'Could not open log file';
 
 ##########################################
 # Global variables
@@ -124,7 +137,8 @@ sub show_help {
     say '';
     say 'Example:';
     say './qsim.pl --mu=1 --lambda1=0.3 --lambda2=0.4 \\';
-    say '--max-events=0 --max-time=100 --scheduling=least-time';
+    say '--max-events=0 --max-time=100 --scheduling=least-time \\';
+    say '--max-simulations=10';
     say '';
 }
 
@@ -136,13 +150,14 @@ sub getopt {
     my $help;
     my $result = GetOptions (
 	"max-events=i" => \$max_events,
-	"max-time=i" => \$max_time,
-	"lambda1=i" => \$lambda1,
-	"lamda2=i" => \$lambda2,
-	"mu=i" => \$mu,
-	"scheduling_strategy=i" => \$scheduling_strategy,
-	"weight1=i" => \$weight1,
-	"weight2=i" => \$weight2,
+	"max-time=f" => \$max_time,
+	"lambda1=f" => \$lambda1,
+	"lambda2=f" => \$lambda2,
+	"mu=f" => \$mu,
+	"scheduling_strategy=s" => \$scheduling_strategy,
+	"weight1=f" => \$weight1,
+	"weight2=f" => \$weight2,
+	"max-simulations=i" => \$max_simulations,
 	"help|h"  => \$help);  # flag
 
     if(!$result || $help) {
@@ -284,6 +299,7 @@ sub print_line {
     my $ql1 = scalar(@queue1);
     my $ql2 = scalar(@queue2);
     printf("%s\t% 10.5f\t% 5d\t% 5d\t% 5d\t% 5d\t% 5d\t% 5d\t% 5d\n", $flag, $t, $a1, $a2, $s, $e, $d, $ql1, $ql2);
+    printf($of "%s\t% 10.5f\t% 5d\t% 5d\t% 5d\t% 5d\t% 5d\t% 5d\t% 5d\n", $flag, $t, $a1, $a2, $s, $e, $d, $ql1, $ql2);
 }
 
 ############################################
@@ -291,6 +307,7 @@ sub print_line {
 ############################################
 sub print_header {
     printf("#%s\t% 10s\t% 5s\t% 5s\t% 5s\t% 5s\t% 5s\t% 5s\t% 5s\n", "f", "t", "a1", "a2", "s", "e", "d", "ql1", "ql2");
+    printf($of "#%s\t% 10s\t% 5s\t% 5s\t% 5s\t% 5s\t% 5s\t% 5s\t% 5s\n", "f", "t", "a1", "a2", "s", "e", "d", "ql1", "ql2");
 }
 
 ##########################################
@@ -320,73 +337,88 @@ if($show_help) {
     exit 0;
 }
 
-print_header(); #print header first
+my $simulation_no = 0;
+for(my $sim_num = 0; $sim_num < $max_simulations;$sim_num++) {
+    %c1 = {'index' => 0, 'time' => 0}; #client 1 time
+    %c2 = {'index' => 0, 'time' => 0}; #client 2 time
+    $client = 3; 
+    $time = 0; #current time
+    @queue1 = (); #queue 1
+    @queue2 = (); #queue 2
+    %service = { 'end_time' => 0,
+		    'client_index' => 0};
+    %stats = {};
 
-my $i = 0;
-while(1)
-{   
-    #if max_events and max_time equal to 0 -> run forever
-    #else run until max_events or max_time reached, whichever occurs
-    # first
-    if($max_events > 0 && $max_time > 0) {
-	last if($i >= $max_events);
-	last if($time >= $max_time);
-    } elsif($max_events > 0) {
-	last if($i >= $max_events);
-    } elsif($max_time > 0) {
-	last if($time >= $max_time);
-    }
-
-    reset_stats(); #reset all stats to 0
-    
-    #first run: recalculates both client event times
-    #subsequent runs: recalculates either client event time
-    #if bit 1 is set, then increment $c1
-    if($client & 1) {
-	$i++;
-	$c1{'index'} = $i;
-	$c1{'time'} = $c1{'time'} + (-1 / $lambda1) * log(rand());
-    }
-    #if bit 2 is set, then increment $c2
-    if($client & 2) {
-	$i++;
-	$c2{'index'} = $i;
-	$c2{'time'} = $c2{'time'} + (-1 / $lambda2) * log(rand());
-    }
-
-    #job end event first? -> terminate job
-    if($service{'client_index'} != 0 && $service{'end_time'} < $c1{'time'} && $service{'end_time'} < $c2{'time'}) {
-	$time = $service{'end_time'};
-	#don't increment client event at next iteration
-	$client = 0; 
-	#stats{'e'} needs to be called BEFORE terminate_job
-	$stats{'e'} = $service{'client_index'}; 
-	#set end event flag
-	$stats{'f'} .= 'e';
-	#terminat the job
-	terminate_job();
-    } 
-    else {
-	#select client event that occurs first
-	if($c1{'time'} < $c2{'time'}) {
-	    $time = $c1{'time'};
-	    #increment client 1 event at next iteration
-	    $client = 1; 
-	    #push client event to queue 1
-	    enqueue(\%c1, 1);
-	    $stats{'a1'} = $c1{'index'};
-	} else {
-	    $time = $c2{'time'};
-	    #increment client 3 event at next iteration
-	    $client = 2; 
-	    #push client event to queue 2
-	    enqueue(\%c2, 2);
-	    $stats{'a2'} = $c2{'index'};
+    print_header(); #print header first
+    my $i = 0;
+  THIS_SIMULATION:
+    while(1)
+    {   
+	#if max_events and max_time equal to 0 -> run forever
+	#else run until max_events or max_time reached, whichever occurs
+	# first
+	if($max_events > 0 && $max_time > 0) {
+	    last THIS_SIMULATION if($i >= $max_events);
+	    last THIS_SIMULATION if($time >= $max_time);
+	} elsif($max_events > 0) {
+	    last THIS_SIMULATION if($i >= $max_events);
+	} elsif($max_time > 0) {
+	    last THIS_SIMULATION if($time >= $max_time);
 	}
-	$stats{'f'} .= 'a';
-    }
 
-    $stats{'s'} = $service{'client_index'};
-    #print stats for this iteration
-    print_line($stats{'a1'}, $stats{'a2'}, $stats{'s'}, $stats{'e'}, $stats{'d'}, $stats{'f'});
-} 
+	reset_stats(); #reset all stats to 0
+	
+	#first run: recalculates both client event times
+	#subsequent runs: recalculates either client event time
+	#if bit 1 is set, then increment $c1
+	if($client & 1) {
+	    $i++;
+	    $c1{'index'} = $i;
+	    $c1{'time'} = $c1{'time'} + (-1 / $lambda1) * log(rand());
+	}
+	#if bit 2 is set, then increment $c2
+	if($client & 2) {
+	    $i++;
+	    $c2{'index'} = $i;
+	    $c2{'time'} = $c2{'time'} + (-1 / $lambda2) * log(rand());
+	}
+
+	#job end event first? -> terminate job
+	if($service{'client_index'} != 0 && $service{'end_time'} < $c1{'time'} && $service{'end_time'} < $c2{'time'}) {
+	    $time = $service{'end_time'};
+	    #don't increment client event at next iteration
+	    $client = 0; 
+	    #stats{'e'} needs to be called BEFORE terminate_job
+	    $stats{'e'} = $service{'client_index'}; 
+	    #set end event flag
+	    $stats{'f'} .= 'e';
+	    #terminat the job
+	    terminate_job();
+	} 
+	else {
+	    #select client event that occurs first
+	    if($c1{'time'} < $c2{'time'}) {
+		$time = $c1{'time'};
+		#increment client 1 event at next iteration
+		$client = 1; 
+		#push client event to queue 1
+		enqueue(\%c1, 1);
+		$stats{'a1'} = $c1{'index'};
+	    } else {
+		$time = $c2{'time'};
+		#increment client 3 event at next iteration
+		$client = 2; 
+		#push client event to queue 2
+		enqueue(\%c2, 2);
+		$stats{'a2'} = $c2{'index'};
+	    }
+	    $stats{'f'} .= 'a';
+	}
+
+	$stats{'s'} = $service{'client_index'};
+	#print stats for this iteration
+	print_line($stats{'a1'}, $stats{'a2'}, $stats{'s'}, $stats{'e'}, $stats{'d'}, $stats{'f'});
+    } 
+}
+
+close($of);
