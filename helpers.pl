@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 use 5.10.0;
 use strict;
+use warnings;
 use Data::Dumper;
 
 sub create_datamap() {
@@ -15,7 +16,7 @@ sub create_datamap() {
 	if($line =~ /^\#/) {
 	    $c++;
 	    $l = -1;
-	    @datamaps[$c] = {};
+	    $datamaps[$c] = ();
 	    @headers = split(' ', $line);
 	    foreach my $e (@headers) {
 		$datamaps[$c]{$e} = ();
@@ -24,7 +25,11 @@ sub create_datamap() {
 	    $l++;
 	    @values = split(' ', $line);
 	    for(my $i = 0; $i < scalar(@values); $i++) {
-		$datamaps[$c]{$headers[$i]}[$l] = sprintf("%.3f" ,$values[$i]);
+		my $formatted_value =  $values[$i];
+		if($formatted_value =~ /^-?(?:\d+(?:\.\d*)?&\.\d+)$/) {
+		    $formatted_value = sprintf("%.3f" ,$formatted_value);
+		} 
+		$datamaps[$c]{$headers[$i]}[$l] = $formatted_value;
 	    }
 	}
     }

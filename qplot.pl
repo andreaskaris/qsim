@@ -1,5 +1,6 @@
 #!/usr/bin/perl
 use strict;
+use warnings;
 use 5.10.0;
 
 use Chart::Graph::Gnuplot qw(gnuplot);
@@ -10,10 +11,10 @@ require './helpers.pl';
 
 my $simulation_id = ''; 
 my @datamaps = ();
-my %datamap = {};
+my %datamap = ();
 my @plots = ();
 my $sim_id = time();
-my $show_help;
+my $show_help = 0;
 
 ###########################################
 # Getopts
@@ -77,16 +78,18 @@ foreach (@datamaps) {
 		 $datamap->{'ql' . $i}
 	     ]);
     }
-#add data about service business, it it exists
-    if(defined($datamap->{'B'})) {
-	push(@plots, [
-		 {'title' => 'Queue length 1',
-		  'style' => 'steps',
-		  'type' => 'columns'
-		 }, 
-		 $datamap->{'t'},
-		 $datamap->{'B'}
-	     ]);
+    #add data about service business, it it exists
+    foreach my $index ('B', 'Y') {
+	if(defined($datamap->{$index})) {
+	    push(@plots, [
+		     {'title' => $index,
+		      'style' => ($index eq 'B') ? 'points' : 'steps',
+		      'type' => 'columns',
+		     }, 
+		     $datamap->{'t'},
+		     $datamap->{$index}
+		 ]);
+	}
     }
     
     gnuplot({'title' => 'Simulation #' . $sim_id,

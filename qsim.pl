@@ -4,7 +4,10 @@
 ##########################################
 use 5.10.0;
 use strict;
+use warnings;
 use Getopt::Long;
+use Data::Dumper;
+use Tie::IxHash;
 
 ##########################################
 # User vars can be set via the command line
@@ -39,11 +42,18 @@ my $scheduling_strategy = 'least-time';
 my $weight1 = 1;
 my $weight2 = 1;
 my $max_simulations = 1;
+my $max_queue_length1 = 0;
+my $max_queue_length2 = 0;
+
+##########################################
+# Simulation ID
+##########################################
+my $simulation_id = time();
 
 ##########################################
 # Storage
 ##########################################
-my $outfile_dir = 'simulations/' . time() . '/';
+my $outfile_dir = 'simulations/' . $simulation_id . '/';
 my $outfile = $outfile_dir . 'simulation.txt';
 if(! -d $outfile_dir) {
     mkdir($outfile_dir) or die 'Could not create directory ' . $outfile_dir;
@@ -71,8 +81,8 @@ open(my $of, '> ' . $outfile) or die 'Could not open log file';
 # new future event for %c2, and so forth. Note that both bits might
 # be  set at the same time, or no bit at all
 ###########################################
-my %c1 = {'index' => 0, 'time' => 0}; #client 1 time
-my %c2 = {'index' => 0, 'time' => 0}; #client 2 time
+my %c1 = ('index' => 0, 'time' => 0); #client 1 time
+my %c2 = ('index' => 0, 'time' => 0); #client 2 time
 my $client = 3; #which client has just been served - in binary! bit 0 -> client 1, bit 1 -> client2
 
 ###########################################
@@ -93,14 +103,14 @@ my $time = 0; #current time
 #queues and service
 my @queue1 = (); #queue 1
 my @queue2 = (); #queue 2
-my %service = { 'end_time' => 0,
-                'client_index' => 0};
+my %service = ( 'end_time' => 0,
+                'client_index' => 0);
 
 ###########################################
 # Stats vars (store stats for each iteration about system)
 # Used to print system state at the end of each iteration
 ###########################################
-my %stats = {};
+tie(my %stats, 'Tie::IxHash');
 
 ###########################################
 # Online help
@@ -125,6 +135,10 @@ sub show_help {
     say '    default: 0.3';
     say '--mu service rate';
     say '    default: 1.0';
+    say '--max-queue-length1 Length of queue 1 where 0 means unlimited';
+    say '    default: 0';
+    say '--max-queue-length2 Length of queue 2 where 0 means unlimited';
+    say '    default: 0';
     say '--scheduling Scheduling strategy, one of the following:';
     say '  least-time';
     say '  round-robin';
@@ -138,7 +152,7 @@ sub show_help {
     say 'Example:';
     say './qsim.pl --mu=1 --lambda1=0.3 --lambda2=0.4 \\';
     say '--max-events=0 --max-time=100 --scheduling=least-time \\';
-    say '--max-simulations=10';
+    say '--max-queue-length1=5 --max-queue-length2=10 --max-simulations=10';
     say '';
 }
 
@@ -158,6 +172,8 @@ sub getopt {
 	"weight1=f" => \$weight1,
 	"weight2=f" => \$weight2,
 	"max-simulations=i" => \$max_simulations,
+	"max-queue-length1=i" => \$max_queue_length1,
+	"max-queue-length2=i" => \$max_queue_length2,
 	"help|h"  => \$help);  # flag
 
     if(!$result || $help) {
@@ -186,13 +202,25 @@ sub enqueue {
     my %c = %{$_[0]};
     my $q = $_[1];
     if($q == 1) {
-	push(@queue1, $c{'index'}); 
+	if($max_queue_length1 && scalar @queue1 >= $max_queue_length1) {
+	    $stats{'d1'} = $c{'index'};
+	    $stats{'D1'}++;
+	} else {
+	    push(@queue1, $c{'index'}); 
+	}
     } else {
-	push(@queue2, $c{'index'});
+	if($max_queue_length2 && scalar @queue2 >= $max_queue_length2) {
+	    $stats{'d2'} = $c{'index'};
+	    $stats{'D2'}++;
+	} else {
+	    push(@queue2, $c{'index'});
+	}
     }
     
     #a new job might be enqueued and served right away .. but ...
     #if the current job isn't done yet, don't fetch a new job
+    $service{'end_time'} = 0 if(!$service{'end_time'});
+    $c{'time'} = 0 if(!$c{'time'});
     if($c{'time'} >= $service{'end_time'}) {
 	serve();
     }
@@ -290,41 +318,64 @@ sub schedule {
 ############################################
 sub print_line {
     my $t = $time;
-    my $a1 = $_[0];
-    my $a2 = $_[1];
-    my $s = $_[2];
-    my $e = $_[3];
-    my $d = $_[4];
-    my $flag = $_[5];
-    my $ql1 = scalar(@queue1);
-    my $ql2 = scalar(@queue2);
-    printf("%s\t% 10.5f\t% 5d\t% 5d\t% 5d\t% 5d\t% 5d\t% 5d\t% 5d\n", $flag, $t, $a1, $a2, $s, $e, $d, $ql1, $ql2);
-    printf($of "%s\t% 10.5f\t% 5d\t% 5d\t% 5d\t% 5d\t% 5d\t% 5d\t% 5d\n", $flag, $t, $a1, $a2, $s, $e, $d, $ql1, $ql2);
+    my $stats = $_[0];
+    my $pattern = '';
+    while( my ($k, $v) = each %$stats ) {
+	$v = 0 if(!defined($v)); #if $v is not initialized, set it to 0
+	if($k eq 'f') {
+	    $pattern = "%s\t";
+	} elsif ($v =~ /^-?\d+$/) { #integer
+	    $pattern = "% 7d\t";
+	} elsif($v =~ /^\d+\.\d+/) { #decimal number
+	    $pattern = "% 7.3f\t";
+	} else {
+	    $pattern = "% 7s\t";
+	}
+	printf($pattern, $v);
+	printf($of $pattern, $v);
+    }
+    printf("\n");
+    printf($of "\n");
 }
 
 ############################################
 # Print header for event table
 ############################################
 sub print_header {
-    printf("#%s\t% 10s\t% 5s\t% 5s\t% 5s\t% 5s\t% 5s\t% 5s\t% 5s\n", "f", "t", "a1", "a2", "s", "e", "d", "ql1", "ql2");
-    printf($of "#%s\t% 10s\t% 5s\t% 5s\t% 5s\t% 5s\t% 5s\t% 5s\t% 5s\n", "f", "t", "a1", "a2", "s", "e", "d", "ql1", "ql2");
+    my $stats = $_[0];
+    printf("#");
+    printf($of "#");
+    while( my ($k, $v) = each %$stats ) { 
+	if($k eq 'f') {
+	    printf("%s\t", $k);
+	    printf($of "%s\t", $k);
+	} else {
+	    printf("% 7s\t", $k);
+	    printf($of "% 7s\t", $k);
+	}
+    }
+    printf("\n");
+    printf($of "\n");
 }
 
 ##########################################
 # Reset the stats counter
-#a1 arrival event 1
-#a2 arrival event 2
-#s service point
-#e end for element
-#d element was dropped
-#ql1 queue length 1
-#ql2 queue length 2
+# resets hash of stats
+# @soft_or_hard_reset 'soft' or 'hard', depending on which counters
+# are set to 0
 ##########################################
 sub reset_stats {
-    foreach my $i ('a1', 'a2', 's', 'e', 'd', 'ql1', 'ql2') {
+    my $soft_or_hard_reset = $_[0];
+    $stats{'f'} = '';
+    $stats{'t'} = $time;
+    foreach my $i ('a1', 'a2', 's', 'e', 'd1', 'd2', 'ql1', 'ql2', 'Y', 'B', 'aB', 'aA1', 'aA2', 'aD1', 'aD2') {
 	$stats{$i} = 0;
     }
-    $stats{'f'} = '';
+    if($soft_or_hard_reset eq 'hard') {
+	foreach my $i ('A1', 'A2', 'D1', 'D2') {
+	    $stats{$i} = 0;
+	}
+    }
 }
 
 ###########################################
@@ -339,17 +390,18 @@ if($show_help) {
 
 my $simulation_no = 0;
 for(my $sim_num = 0; $sim_num < $max_simulations;$sim_num++) {
-    %c1 = {'index' => 0, 'time' => 0}; #client 1 time
-    %c2 = {'index' => 0, 'time' => 0}; #client 2 time
+    %c1 = ('index' => 0, 'time' => 0); #client 1 time
+    %c2 = ('index' => 0, 'time' => 0); #client 2 time
     $client = 3; 
     $time = 0; #current time
     @queue1 = (); #queue 1
     @queue2 = (); #queue 2
-    %service = { 'end_time' => 0,
-		    'client_index' => 0};
-    %stats = {};
-
-    print_header(); #print header first
+    %service = ( 'end_time' => 0,
+		 'client_index' => 0);
+    reset_stats('hard');
+    $stats{'f'} = 'b';
+    print_header(\%stats); #print header first
+    print_line(\%stats); #print null event
     my $i = 0;
   THIS_SIMULATION:
     while(1)
@@ -366,7 +418,7 @@ for(my $sim_num = 0; $sim_num < $max_simulations;$sim_num++) {
 	    last THIS_SIMULATION if($time >= $max_time);
 	}
 
-	reset_stats(); #reset all stats to 0
+	reset_stats('soft'); #reset all stats to 0
 	
 	#first run: recalculates both client event times
 	#subsequent runs: recalculates either client event time
@@ -374,16 +426,19 @@ for(my $sim_num = 0; $sim_num < $max_simulations;$sim_num++) {
 	if($client & 1) {
 	    $i++;
 	    $c1{'index'} = $i;
+	    $c1{'time'} = 0 if(!$c1{'time'});
 	    $c1{'time'} = $c1{'time'} + (-1 / $lambda1) * log(rand());
 	}
 	#if bit 2 is set, then increment $c2
 	if($client & 2) {
 	    $i++;
 	    $c2{'index'} = $i;
+	    $c2{'time'} = 0 if(!$c2{'time'});
 	    $c2{'time'} = $c2{'time'} + (-1 / $lambda2) * log(rand());
 	}
 
 	#job end event first? -> terminate job
+	$service{'client_index'} = 0 if !$service{'client_index'};
 	if($service{'client_index'} != 0 && $service{'end_time'} < $c1{'time'} && $service{'end_time'} < $c2{'time'}) {
 	    $time = $service{'end_time'};
 	    #don't increment client event at next iteration
@@ -404,6 +459,7 @@ for(my $sim_num = 0; $sim_num < $max_simulations;$sim_num++) {
 		#push client event to queue 1
 		enqueue(\%c1, 1);
 		$stats{'a1'} = $c1{'index'};
+		$stats{'A1'}++;
 	    } else {
 		$time = $c2{'time'};
 		#increment client 3 event at next iteration
@@ -411,14 +467,25 @@ for(my $sim_num = 0; $sim_num < $max_simulations;$sim_num++) {
 		#push client event to queue 2
 		enqueue(\%c2, 2);
 		$stats{'a2'} = $c2{'index'};
+		$stats{'A2'}++;
 	    }
 	    $stats{'f'} .= 'a';
 	}
 
 	$stats{'s'} = $service{'client_index'};
+	$stats{'ql1'} = scalar @queue1;
+	$stats{'ql2'} = scalar @queue2;
+	$stats{'B'} = ($service{'end_time'} > 0) ? 1 : 0;
+	$stats{'Y'} = $stats{'ql1'} + $stats{'ql2'} + $stats{'B'};
+	$stats{'aA1'} = $stats{'A1'} / $time;
+	$stats{'aA2'} = $stats{'A2'} / $time;
+	$stats{'aD1'} = $stats{'D1'} / $time;
+	$stats{'aD2'} = $stats{'D2'} / $time;
 	#print stats for this iteration
-	print_line($stats{'a1'}, $stats{'a2'}, $stats{'s'}, $stats{'e'}, $stats{'d'}, $stats{'f'});
+	print_line(\%stats);
     } 
 }
 
 close($of);
+
+say 'Simulation ID: ' . $simulation_id;
