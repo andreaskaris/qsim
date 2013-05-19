@@ -44,6 +44,7 @@ my $weight2 = 1;
 my $max_simulations = 1;
 my $max_queue_length1 = 0;
 my $max_queue_length2 = 0;
+my $verbose = 0;
 
 ##########################################
 # Simulation ID
@@ -174,6 +175,7 @@ sub getopt {
 	"max-simulations=i" => \$max_simulations,
 	"max-queue-length1=i" => \$max_queue_length1,
 	"max-queue-length2=i" => \$max_queue_length2,
+	"verbose|v" => \$verbose,
 	"help|h"  => \$help);  # flag
 
     if(!$result || $help) {
@@ -331,10 +333,10 @@ sub print_line {
 	} else {
 	    $pattern = "% 7s\t";
 	}
-	printf($pattern, $v);
+	printf($pattern, $v) if($verbose);
 	printf($of $pattern, $v);
     }
-    printf("\n");
+    printf("\n") if($verbose);
     printf($of "\n");
 }
 
@@ -343,18 +345,18 @@ sub print_line {
 ############################################
 sub print_header {
     my $stats = $_[0];
-    printf("#");
+    printf("#") if($verbose);
     printf($of "#");
     while( my ($k, $v) = each %$stats ) { 
 	if($k eq 'f') {
-	    printf("%s\t", $k);
+	    printf("%s\t", $k) if($verbose);
 	    printf($of "%s\t", $k);
 	} else {
-	    printf("% 7s\t", $k);
+	    printf("% 7s\t", $k) if($verbose);
 	    printf($of "% 7s\t", $k);
 	}
     }
-    printf("\n");
+    printf("\n") if($verbose);
     printf($of "\n");
 }
 
@@ -488,4 +490,4 @@ for(my $sim_num = 0; $sim_num < $max_simulations;$sim_num++) {
 
 close($of);
 
-say 'Simulation ID: ' . $simulation_id;
+say '' . $simulation_id;
