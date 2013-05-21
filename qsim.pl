@@ -45,21 +45,8 @@ my $max_simulations = 1;
 my $max_queue_length1 = 0;
 my $max_queue_length2 = 0;
 my $verbose = 0;
-
-##########################################
-# Simulation ID
-##########################################
-my $simulation_id = time();
-
-##########################################
-# Storage
-##########################################
-my $outfile_dir = 'simulations/' . $simulation_id . '/';
-my $outfile = $outfile_dir . 'simulation.txt';
-if(! -d $outfile_dir) {
-    mkdir($outfile_dir) or die 'Could not create directory ' . $outfile_dir;
-}
-open(my $of, '> ' . $outfile) or die 'Could not open log file';
+my $simulation_id = '';
+my $of; #outfile
 
 ##########################################
 # Global variables
@@ -120,8 +107,7 @@ my $show_help = 0;
 sub show_help {
     say 'qsim.pl version 1';
     say '';
-    say 'User vars can be set via the command line';
-    say 'See help file for more info';
+    say '--simulation-id mandatory simulation identifier';
     say '--max-events stop simulation after x events';
     say '  0 means do not consider no. of events';
     say '    default: 0';
@@ -151,7 +137,7 @@ sub show_help {
     say '    default: 1';
     say '';
     say 'Example:';
-    say './qsim.pl --mu=1 --lambda1=0.3 --lambda2=0.4 \\';
+    say './qsim.pl --simulation-id=mysim simulation --mu=1 --lambda1=0.3 --lambda2=0.4 \\';
     say '--max-events=0 --max-time=100 --scheduling=least-time \\';
     say '--max-queue-length1=5 --max-queue-length2=10 --max-simulations=10';
     say '';
@@ -164,6 +150,7 @@ sub show_help {
 sub getopt {
     my $help;
     my $result = GetOptions (
+	"simulation-id=s" => \$simulation_id,
 	"max-events=i" => \$max_events,
 	"max-time=f" => \$max_time,
 	"lambda1=f" => \$lambda1,
@@ -178,7 +165,7 @@ sub getopt {
 	"verbose|v" => \$verbose,
 	"help|h"  => \$help);  # flag
 
-    if(!$result || $help) {
+    if(!$result || !$simulation_id || $help) {
 	$show_help = 1;
     }
 }
@@ -387,8 +374,18 @@ sub reset_stats {
 getopt();
 if($show_help) {
     show_help();
-    exit 0;
+    exit 1;
 }
+
+##########################################
+# Storage
+##########################################
+my $outfile_dir = 'simulations/' . $simulation_id . '/';
+my $outfile = $outfile_dir . 'simulation.txt';
+if(! -d $outfile_dir) {
+    mkdir($outfile_dir) or die 'Could not create directory ' . $outfile_dir;
+}
+open($of, '> ' . $outfile) or die 'Could not open log file';
 
 my $simulation_no = 0;
 for(my $sim_num = 0; $sim_num < $max_simulations;$sim_num++) {

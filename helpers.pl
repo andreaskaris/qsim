@@ -5,14 +5,18 @@ use warnings;
 use Data::Dumper;
 
 sub create_datamap() {
+    my $simulation_file = $_[0];
+
     my @datamaps = ();
     my @headers = ();
     my @values = ();
 
+    open(SIMULATION_FILE, '<' . $simulation_file);
+
     my $line;
     my $c = -1;
     my $l = -1;
-    while($line = <STDIN>) {
+    while($line = <SIMULATION_FILE>) {
 	if($line =~ /^\#/) {
 	    $c++;
 	    $l = -1;
@@ -34,9 +38,21 @@ sub create_datamap() {
 	}
     }
 
-    #push(@datamaps, %datamap);
+    close(SIMULATION_FILE);
     return @datamaps;
 }
 
+sub get_simulation_directory {
+    my $simulation_id = $_[0];
+    my $simulation_directory = 'simulations/' . $simulation_id . '/';
+    return $simulation_directory;
+}
+
+sub get_simulation_file {
+    my $simulation_id = $_[0];
+    my $simulation_directory = get_simulation_directory($simulation_id);
+    my $simulation_file = $simulation_directory . 'simulation.txt';
+    return $simulation_file;
+}
 
 1;

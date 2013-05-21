@@ -13,7 +13,6 @@ my $simulation_id = '';
 my @datamaps = ();
 my %datamap = ();
 my @plots = ();
-my $sim_id = time();
 my $show_help = 0;
 
 ###########################################
@@ -49,15 +48,14 @@ if($show_help == 1 || !$simulation_id) {
     exit 1;
 }
 
-my $simulation_directory = 'simulations/' . $simulation_id . '/';
-my $simulation_file = $simulation_directory . 'simulation.txt';
+my $simulation_directory = get_simulation_directory($simulation_id);
+my $simulation_file = get_simulation_file($simulation_id);
 if(!-f $simulation_file) {
     say 'Error: Simulation file ' . $simulation_file . ' does not exist';
     exit 1;
 }
 
-open(STDIN, '<' . $simulation_file);
-@datamaps = create_datamap();
+@datamaps = create_datamap($simulation_file);
 my $datamap;
 my $sim_num = 0;
 
@@ -96,8 +94,8 @@ foreach (@datamaps) {
 	}
     }
     
-    gnuplot({'title' => 'Simulation #' . $sim_id,
-	     'x2-axis label' => 'Analysis of simulation #' . $sim_id. ' run # ' . $sim_num,
+    gnuplot({'title' => 'Simulation #' . $simulation_id,
+	     'x2-axis label' => 'Analysis of simulation #' . $simulation_id. ' run # ' . $sim_num,
 	     #'logscale x2' => '1',
 	     #'logscale y' => '1',
 	     'output type' => 'png',
@@ -151,8 +149,8 @@ foreach (@datamaps) {
 	}
     }
     
-    gnuplot({'title' => 'Simulation #' . $sim_id,
-	     'x2-axis label' => 'Analysis of simulation #' . $sim_id. ' run # ' . $sim_num,
+    gnuplot({'title' => 'Simulation #' . $simulation_id,
+	     'x2-axis label' => 'Analysis of simulation #' . $simulation_id. ' run # ' . $sim_num,
 	     #'logscale x2' => '1',
 	     #'logscale y' => '1',
 	     'output type' => 'png',
@@ -193,8 +191,8 @@ foreach (@datamaps) {
 	     ]);
     }
     
-    gnuplot({'title' => 'Simulation #' . $sim_id,
-	     'x2-axis label' => 'Analysis of simulation #' . $sim_id. ' run # ' . $sim_num,
+    gnuplot({'title' => 'Simulation #' . $simulation_id,
+	     'x2-axis label' => 'Analysis of simulation #' . $simulation_id. ' run # ' . $sim_num,
 	     #'logscale x2' => '1',
 	     #'logscale y' => '1',
 	     'output type' => 'png',
@@ -208,6 +206,6 @@ foreach (@datamaps) {
 	);
 }
 
-close(STDIN);
+say $simulation_id;
 
-say $sim_num;
+exit 0;
