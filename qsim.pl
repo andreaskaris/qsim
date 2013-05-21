@@ -88,6 +88,7 @@ my $client = 3; #which client has just been served - in binary! bit 0 -> client 
 ###########################################
 #current system time
 my $time = 0; #current time
+my $old_time = 0; #system time at last run
 #queues and service
 my @queue1 = (); #queue 1
 my @queue2 = (); #queue 2
@@ -361,7 +362,7 @@ sub reset_stats {
 	$stats{$i} = 0;
     }
     if($soft_or_hard_reset eq 'hard') {
-	foreach my $i ('A1', 'A2', 'D1', 'D2') {
+	foreach my $i ('A1', 'A2', 'D1', 'D2', 'tB') {
 	    $stats{$i} = 0;
 	}
     }
@@ -393,6 +394,7 @@ for(my $sim_num = 0; $sim_num < $max_simulations;$sim_num++) {
     %c2 = ('index' => 0, 'time' => 0); #client 2 time
     $client = 3; 
     $time = 0; #current time
+    $old_time = 0; #system time at last run of loop
     @queue1 = (); #queue 1
     @queue2 = (); #queue 2
     %service = ( 'end_time' => 0,
@@ -405,6 +407,8 @@ for(my $sim_num = 0; $sim_num < $max_simulations;$sim_num++) {
   THIS_SIMULATION:
     while(1)
     {   
+	$old_time = $time;
+
 	#if max_events and max_time equal to 0 -> run forever
 	#else run until max_events or max_time reached, whichever occurs
 	# first
@@ -480,6 +484,9 @@ for(my $sim_num = 0; $sim_num < $max_simulations;$sim_num++) {
 	$stats{'aA2'} = $stats{'A2'} / $time;
 	$stats{'aD1'} = $stats{'D1'} / $time;
 	$stats{'aD2'} = $stats{'D2'} / $time;
+	$stats{'tB'} = ($time - $old_time) * $stats{'B'} + $stats{'tB'};
+	$stats{'aB'} = $stats{'tB'} / $time;
+	
 	#print stats for this iteration
 	print_line(\%stats);
     } 

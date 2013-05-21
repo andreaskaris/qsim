@@ -190,6 +190,15 @@ foreach (@datamaps) {
 		 $datamap->{'D' . $i}
 	     ]);
     }
+    #plot absolute time busy
+    push(@plots, [
+	     {'title' => 'Absolute time busy',
+	      'style' => 'steps',
+	      'type' => 'columns'
+	     }, 
+	     $datamap->{'t'},
+	     $datamap->{'tB'}
+	 ]);
     
     gnuplot({'title' => 'Simulation #' . $simulation_id,
 	     'x2-axis label' => 'Analysis of simulation #' . $simulation_id. ' run # ' . $sim_num,

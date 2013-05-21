@@ -107,6 +107,7 @@ for(my $sim_num = 1; $sim_num <= $simulation_num; $sim_num++) {
     my $Y;
     my $avg_arrival_rates = '';
     my $avg_drop_rates = '';
+    my $tB;
     my $aB;
     my $abs_arrivals = '';
     my $abs_drops = '';
@@ -114,7 +115,8 @@ for(my $sim_num = 1; $sim_num <= $simulation_num; $sim_num++) {
     $time = $datamap->{'t'}[$event_num - 1];
     $B = 'B: ' . $datamap->{'B'}[$event_num - 1] . '<br />';
     $Y = 'Y: ' .$datamap->{'Y'}[$event_num - 1] . '<br />';
-    $aB = 'aB: ' . $datamap->{'aB'}[$event_num - 1] . '<br />';
+    $aB = 'average busy: ' . $datamap->{'aB'}[$event_num - 1] . '<br />';
+    $tB = 'total time busy: ' . $datamap->{'tB'}[$event_num - 1] . '<br />';
     for(my $i = 1; defined($datamap->{'ql' . $i}); $i++) {
 	$queue_lengths .= "Queue length ${i}: " . $datamap->{'ql' . $i}[$event_num - 1] . '<br />';
     }
@@ -154,6 +156,7 @@ for(my $sim_num = 1; $sim_num <= $simulation_num; $sim_num++) {
     <p>
       ${abs_arrivals}
       ${abs_drops}
+      ${tB}
     </p>
   </div>
 END
